@@ -16,7 +16,6 @@
  */
 
 #include "phpy.h"
-#include "zend_interfaces.h"
 
 BEGIN_EXTERN_C()
 #include "stubs/phpy_dict_arginfo.h"
@@ -29,7 +28,6 @@ int php_class_dict_init(INIT_FUNC_ARGS) {
     INIT_CLASS_ENTRY(ce, "PyDict", class_PyDict_methods);
     PyDict_ce = zend_register_internal_class_ex(&ce, phpy_object_get_ce());
     PyDict_ce->ce_flags |= ZEND_ACC_FINAL | ZEND_ACC_NO_DYNAMIC_PROPERTIES | ZEND_ACC_NOT_SERIALIZABLE;
-    zend_class_implements(PyDict_ce, 3, zend_ce_iterator, zend_ce_arrayaccess, zend_ce_countable);
     return SUCCESS;
 }
 
@@ -57,8 +55,11 @@ ZEND_METHOD(PyDict, __construct) {
     PyObject *pdict;
     if (phpy::php::is_null(zdict) || phpy::php::is_empty_array(zdict)) {
         pdict = PyDict_New();
-    } else {
+    } else if (phpy::php::is_array(zdict)) {
         pdict = array2dict(zdict);
+    } else {
+        zend_throw_error(NULL, "PyDict: unsupported type");
+        return;
     }
     phpy_object_ctor(ZEND_THIS, pdict);
 }
@@ -71,9 +72,7 @@ ZEND_METHOD(PyDict, offsetGet) {
     };
     auto value = PyDict_GetItem(object, pk);
     if (value == NULL) {
-        PyErr_Print();
-        phpy::StrObject key(pk);
-        zend_throw_error(NULL, "PyDict: error key [%s]", key.val());
+        phpy::php::throw_error_if_occurred();
         return;
     }
     py2php(value, return_value);
@@ -91,14 +90,11 @@ ZEND_METHOD(PyDict, offsetSet) {
     auto object = phpy_object_get_handle(ZEND_THIS);
     PyObject *pv = php2py(zv);
     PyObject *pk = php2py(zk);
-    ON_SCOPE_EXIT {
-        Py_DECREF(pv);
-        Py_DECREF(pk);
-    };
     auto value = PyDict_SetItem(object, pk, pv);
+    Py_DECREF(pv);
+    Py_DECREF(pk);
     if (value < 0) {
-        PyErr_Print();
-        zend_throw_error(NULL, "PyDict: cannot write attribute");
+        phpy::php::throw_error_if_occurred();
     }
 }
 
@@ -114,18 +110,6 @@ ZEND_METHOD(PyDict, offsetExists) {
     auto object = phpy_object_get_handle(ZEND_THIS);
     RETVAL_BOOL(PyDict_Contains(object, pk));
     Py_DECREF(pk);
-}
-
-ZEND_METHOD(PyDict, rewind) {
-    phpy_object_iterator_reset(ZEND_THIS);
-}
-
-ZEND_METHOD(PyDict, next) {
-    phpy_object_iterator_next(ZEND_THIS);
-}
-
-ZEND_METHOD(PyDict, valid) {
-    RETURN_BOOL(phpy_object_iterator_valid(ZEND_THIS));
 }
 
 ZEND_METHOD(PyDict, key) {

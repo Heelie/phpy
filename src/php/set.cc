@@ -17,8 +17,6 @@
 
 #include "phpy.h"
 
-#include "zend_interfaces.h"
-
 BEGIN_EXTERN_C()
 #include "stubs/phpy_set_arginfo.h"
 END_EXTERN_C()
@@ -32,7 +30,6 @@ int php_class_set_init(INIT_FUNC_ARGS) {
     INIT_CLASS_ENTRY(ce, "PySet", class_PySet_methods);
     PySet_ce = zend_register_internal_class_ex(&ce, phpy_object_get_ce());
     PySet_ce->ce_flags |= ZEND_ACC_FINAL | ZEND_ACC_NO_DYNAMIC_PROPERTIES | ZEND_ACC_NOT_SERIALIZABLE;
-    zend_class_implements(PySet_ce, 2, zend_ce_iterator, zend_ce_countable);
     return SUCCESS;
 }
 
@@ -54,32 +51,13 @@ ZEND_METHOD(PySet, __construct) {
     PyObject *pset;
     if (phpy::php::is_null(zset) || phpy::php::is_empty_array(zset)) {
         pset = PySet_New(0);
-    } else {
+    } else if (phpy::php::is_array(zset)) {
         pset = array2set(zset);
-    }
-    phpy_object_ctor(ZEND_THIS, pset);
-}
-
-ZEND_METHOD(PySet, rewind) {
-    phpy_object_iterator_reset(ZEND_THIS);
-}
-
-ZEND_METHOD(PySet, next) {
-    phpy_object_iterator_next(ZEND_THIS);
-}
-
-ZEND_METHOD(PySet, valid) {
-    RETURN_BOOL(phpy_object_iterator_valid(ZEND_THIS));
-}
-
-ZEND_METHOD(PySet, key) {}
-
-ZEND_METHOD(PySet, current) {
-    auto current = phpy_object_iterator_current(ZEND_THIS);
-    if (current == NULL) {
+    } else {
+        zend_throw_error(NULL, "PySet: unsupported type");
         return;
     }
-    py2php(current, return_value);
+    phpy_object_ctor(ZEND_THIS, pset);
 }
 
 ZEND_METHOD(PySet, count) {

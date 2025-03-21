@@ -16,6 +16,8 @@
  */
 
 #include "phpy.h"
+#include "zend_exceptions.h"
+#include "ext/standard/basic_functions.h"
 
 struct ZendCallable;
 static void Callable_dealloc(ZendCallable *self);
@@ -59,8 +61,10 @@ bool ZendCallable_Check(PyObject *pv) {
 }
 
 static void Callable_dealloc(ZendCallable *self) {
-    zval_ptr_dtor(&self->callable);
-    phpy::php::del_object((PyObject *) self);
+    if (phpy::php::del_object((PyObject *) self)) {
+        zval_ptr_dtor(&self->callable);
+        ZVAL_NULL(&self->callable);
+    }
     Py_TYPE(self)->tp_free((PyObject *) self);
 }
 
@@ -77,7 +81,14 @@ static PyObject *Callable_call(ZendCallable *self, PyObject *args, PyObject *kwd
     zval retval;
     zend_result result = phpy::php::call_fn(NULL, &self->callable, &retval, argc, argv);
     if (result == FAILURE) {
+        if (EG(exception) && phpy_options.display_exception) {
+            zend_exception_error(EG(exception), E_ERROR);
+            zend_clear_exception();
+        }
         PyErr_Format(PyExc_RuntimeError, "Function call failed");
+        return NULL;
+    }
+    if (PyErr_Occurred()) {
         return NULL;
     }
     RETURN_PYOBJ(&retval);

@@ -6,7 +6,7 @@
 
 参考：[https://wiki.php.net/internals/windows/stepbystepbuild_sdk_2](https://wiki.php.net/internals/windows/stepbystepbuild_sdk_2)
 
-- 安装 `Visual C++ 16.0`
+- 安装 `Visual C++ 16.0`，地址：[https://aka.ms/vs/16/release/vs_buildtools.exe](https://aka.ms/vs/16/release/vs_buildtools.exe)
 - 安装 `php-sdk-binary-tools`，地址：[https://github.com/php/php-sdk-binary-tools](https://github.com/php/php-sdk-binary-tools)
 - 下载 `php` 源代码
 - 安装依赖库，地址：[https://windows.php.net/downloads/php-sdk/deps/](https://windows.php.net/downloads/php-sdk/deps/)
@@ -41,6 +41,7 @@ phpsdk-vs16-x64.bat
 
 ```shell
 cd D:\workspace\php-sdk\php-sdk-binary-tools-2.2.0\phpdev\vs16\x64\php-8.1.5
+phpsdk_deps -u
 ```
 
 扩展项目放置于 `php-src` 的 `ext` 目录下，例如：`D:\workspace\php-sdk\php-sdk-binary-tools-2.2.0\phpdev\vs16\x64\php-8.1.5\ext\phpy`，也可以使用 `mklink` 命令创建软连接。
@@ -52,7 +53,7 @@ cd D:\workspace\php-sdk\php-sdk-binary-tools-2.2.0\phpdev\vs16\x64\php-8.1.5
 $ buildconf --force
 Rebuilding configure.js
 Now run 'configure --help'
-configure --disable-all --enable-cli --disable-zts --enable-phpy=shared
+configure --with-openssl --with-mysqlnd --with-mysqli --enable-mbstring --enable-pdo --with-pdo-mysql --with-curl --enable-cli --enable-opcache --disable-zts --enable-phpy=shared
 ```
 
 `--enable-phpy=shared` 表示启用 `phpy` 扩展，并且编译为 `.dll` 动态链接库

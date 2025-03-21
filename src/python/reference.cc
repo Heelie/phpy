@@ -46,7 +46,6 @@ static int Reference_init(ZendReference *self, PyObject *args, PyObject *kwds) {
 
 static void Reference_dtor(PyObject *pv) {
     ZendReference *self = (ZendReference *) pv;
-    phpy::php::del_object(pv);
     zval_ptr_dtor(&self->reference);
     ZVAL_NULL(&self->reference);
 }
@@ -56,7 +55,9 @@ static PyObject *Reference_get(ZendReference *self, PyObject *args) {
 }
 
 static void Reference_destroy(ZendReference *self) {
-    zval_ptr_dtor(&self->reference);
+    if (phpy::php::del_object((PyObject *) self)) {
+        Reference_dtor((PyObject *) self);
+    }
     Py_TYPE(self)->tp_free((PyObject *) self);
 }
 

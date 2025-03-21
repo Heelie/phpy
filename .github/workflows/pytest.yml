@@ -5,13 +5,14 @@ on: [ push, pull_request ]
 jobs:
   python:
     runs-on: ubuntu-latest
+    if: 1
     env:
       PYTHON_VERSION: ${{ matrix.python }}
       IN_CI: 1
     strategy:
       fail-fast: false
       matrix:
-        python: [ '3.7', '3.8', '3.9', '3.10', '3.11', '3.12' ]
+        python: [ '3.8', '3.9', '3.10', '3.11', '3.12', '3.13' ]
     steps:
       - uses: actions/checkout@v4
       - name: Install deps

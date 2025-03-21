@@ -17,8 +17,6 @@
 
 #include "phpy.h"
 
-#include "zend_interfaces.h"
-
 BEGIN_EXTERN_C()
 #include "stubs/phpy_tuple_arginfo.h"
 END_EXTERN_C()
@@ -80,6 +78,8 @@ ZEND_METHOD(PyTuple, offsetGet) {
         zend_throw_error(NULL, "PyTuple: index[%ld] out of range", pk);
         return;
     }
+    // PyTuple_GetItem()
+    // Return value: Borrowed reference
     auto value = PyTuple_GetItem(object, pk);
     if (value != NULL) {
         py2php(value, return_value);
@@ -97,5 +97,5 @@ ZEND_METHOD(PyTuple, offsetUnset) {
 ZEND_METHOD(PyTuple, offsetExists) {
     auto pk = get_key(INTERNAL_FUNCTION_PARAM_PASSTHRU);
     auto object = phpy_object_get_handle(ZEND_THIS);
-    RETVAL_BOOL(PyTuple_Size(object) > pk);
+    RETVAL_BOOL(pk >= 0 && PyTuple_Size(object) > pk);
 }

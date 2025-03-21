@@ -17,8 +17,6 @@
 
 #include "phpy.h"
 
-#include "zend_interfaces.h"
-
 BEGIN_EXTERN_C()
 #include "stubs/phpy_list_arginfo.h"
 END_EXTERN_C()
@@ -63,10 +61,12 @@ ZEND_METHOD(PyList, __construct) {
     PyObject *plist;
     if (phpy::php::is_null(zlist) || phpy::php::is_empty_array(zlist)) {
         plist = PyList_New(0);
-    } else {
+    } else if (phpy::php::is_array(zlist)) {
         plist = array2list(zlist);
+    } else {
+        zend_throw_error(NULL, "PyList: unsupported type");
+        return;
     }
-
     phpy_object_ctor(ZEND_THIS, plist);
 }
 
@@ -77,6 +77,8 @@ ZEND_METHOD(PyList, offsetGet) {
         zend_throw_error(NULL, "PyList: index[%ld] out of range", pk);
         return;
     }
+    // PyList_GetItem()
+    // Return value: Borrowed reference
     auto value = PyList_GetItem(object, pk);
     if (value != NULL) {
         py2php(value, return_value);
@@ -94,19 +96,18 @@ ZEND_METHOD(PyList, offsetSet) {
 
     auto object = phpy_object_get_handle(ZEND_THIS);
     PyObject *pv = php2py(zv);
-    ON_SCOPE_EXIT {
-        Py_DECREF(pv);
-    };
     int result;
     if (zk == NULL || ZVAL_IS_NULL(zk)) {
         result = PyList_Append(object, pv);
     } else {
         Py_INCREF(pv);
+        // PyList_SetItem()
+        // Not increase reference count of the value
         result = PyList_SetItem(object, zval_get_long(zk), pv);
     }
+    Py_DECREF(pv);
     if (result < 0) {
-        PyErr_Print();
-        zend_throw_error(NULL, "PyList: cannot write attribute");
+        phpy::php::throw_error_if_occurred();
     }
 }
 

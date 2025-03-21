@@ -9,8 +9,12 @@
 *.lo
 *.o
 *.loT
+/.log
+/.runtime
+/.venv
 /Debug
 /build
+/out
 /.libs
 /autom4te.cache
 /CMakeCache.txt
@@ -19,6 +23,7 @@ Makefile
 /CMakeFiles
 /.settings
 __pycache__
+__phpy_proxy__
 /vendor
 /venv
 /.pytest_cache
@@ -47,4 +52,5 @@ configure.in
 acinclude.m4
 config.guess
 config.sub
+/composer.lock
 

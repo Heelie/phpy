@@ -35,40 +35,35 @@ getoutput(...): Runs a command in the shell, waits for it to complete,
 getstatusoutput(...): Runs a command in the shell, waits for it to complete,
     then returns a (exitcode, output) tuple
 */
-class subprocess{
+class subprocess
+{
     /**
-    * @return subprocess 
+    * @return subprocess
     */
     public static function import()
     {
         return \PyCore::import('subprocess');
     }
+
     public $DEVNULL = -3;
     public $PIPE = -1;
     public $STDOUT = -2;
     public $_PIPE_BUF = 4096;
-    public $_WNOHANG = 1;
 
     public $_USE_POSIX_SPAWN = true;
     public $_USE_VFORK = true;
     public $__name__ = "subprocess";
     public $__package__ = "";
-    public $_can_fork_exec = true;
     public $_mswindows = false;
 
-    public $CalledProcessError = null;
-    public $CompletedProcess = null;
-    public $Popen = null;
-    public $SubprocessError = null;
-    public $TimeoutExpired = null;
     public $_PopenSelector = null;
     public $_active = null;
+    public $_posixsubprocess = null;
     public $builtins = null;
     public $contextlib = null;
     public $errno = null;
     public $fcntl = null;
     public $io = null;
-    public $locale = null;
     public $os = null;
     public $select = null;
     public $selectors = null;
@@ -79,66 +74,79 @@ class subprocess{
     public $types = null;
     public $warnings = null;
 
-    public function _WIFSTOPPED($status)
-    {
-    }
-
-    public function _WSTOPSIG($status)
-    {
-    }
-
+    /**
+    * @return mixed
+    */
     public function _args_from_interpreter_flags()
     {
     }
 
+    /**
+    * @return mixed
+    */
     public function _cleanup()
     {
     }
 
+    /**
+    * @return mixed
+    */
     public function _optim_args_from_interpreter_flags()
     {
     }
 
-    public function _text_encoding()
-    {
-    }
-
+    /**
+    * @return mixed
+    */
     public function _use_posix_spawn()
     {
     }
 
-    public function _waitpid($pid, $options)
-    {
-    }
-
-    public function _waitstatus_to_exitcode($status)
-    {
-    }
-
+    /**
+    * @return mixed
+    */
     public function call()
     {
     }
 
+    /**
+    * @return mixed
+    */
     public function check_call()
     {
     }
 
+    /**
+    * @return mixed
+    */
     public function check_output()
     {
     }
 
+    /**
+    * @return mixed
+    */
     public function getoutput($cmd)
     {
     }
 
+    /**
+    * @return mixed
+    */
     public function getstatusoutput($cmd)
     {
     }
 
+    /**
+    * @return mixed
+    */
     public function list2cmdline($seq)
     {
     }
 
+    /**
+    * @return mixed
+    */
     public function run()
     {
     }

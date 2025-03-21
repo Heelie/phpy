@@ -20,6 +20,14 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
+#ifdef HAVE_PUTENV
+#undef HAVE_PUTENV
+#endif
+
+#ifdef HAVE_GETPID
+#undef HAVE_GETPID
+#endif
+
 #include <main/php.h>
 #include <main/SAPI.h>
 #include <main/php_main.h>
@@ -70,6 +78,14 @@ inline ScopeGuard<Fun> operator+(ScopeGuardOnExit, Fun &&fn) {
 }  // namespace detail
 
 #define ON_SCOPE_EXIT auto __SCOPEGUARD_CONCATENATE(ext_exitBlock_, __LINE__) = detail::ScopeGuardOnExit() + [&]()
+
+enum {
+    PHPY_PHP_EXTENSION = 1,
+    PHPY_PYTHON_MODULE = 2,
+};
+
+int phpy_init(int mode);
+int phpy_get_mode(void);
 
 zval *zend_string_cast(PyObject *pv);
 zval *zend_reference_cast(PyObject *pv);
@@ -143,6 +159,7 @@ void debug_dump(uint32_t i, zval *item);
 void debug_dump(uint32_t i, PyObject *pObj);
 void var_dump(zval *var);
 void debug_var_dump(zval *var);
+void debug_print_refcnt(const char *fn, PyObject *zv);
 
 bool py_module_string_init(PyObject *m);
 bool py_module_object_init(PyObject *m);
@@ -233,9 +250,9 @@ void new_iter(zval *zv, PyObject *type);
 void new_error(zval *zv, PyObject *error);
 
 void add_object(PyObject *pv, void (*)(PyObject *));
-void del_object(PyObject *pv);
+bool del_object(PyObject *pv);
 void call_builtin_fn(const char *name, size_t l_name, zval *arguments, zval *return_value);
-
+bool env_equals(const char *name, size_t nlen, const char *val, size_t vlen);
 void throw_error(PyObject *error);
 
 static inline void throw_error_if_occurred() {
@@ -276,7 +293,7 @@ static inline zval *array_get(zval *zv, long index) {
     return zend_hash_index_find(Z_ARR_P(zv), index);
 }
 /**
- * Return value: Borrowed reference.
+ * Return value: Borrowed reference. If not exist, returns null pointer
  */
 static inline zval *array_get(zval *zv, const char *key, size_t l_key) {
     return zend_hash_str_find(Z_ARR_P(zv), key, l_key);
@@ -328,10 +345,11 @@ struct CallObject {
     uint32_t argc = 0;
     PyObject *fn;
     zval *return_value;
+    bool args_ready = true;
     CallObject(PyObject *_fn, zval *_return_value, uint32_t _argc, zval *_argv, zend_array *_kwargs);
     CallObject(PyObject *_fn, zval *_return_value, zval *_argv);
-    void parse_args(zval *array);
-    void parse_args(uint32_t _argc, zval *_argv);
+    bool parse_args(zval *array);
+    bool parse_args(uint32_t _argc, zval *_argv);
     ~CallObject();
     void call();
 };
@@ -367,7 +385,16 @@ PyObject *new_reference(zval *zv);
 PyObject *new_callable(zval *zv);
 const char *string2utf8(PyObject *pv, ssize_t *len);
 const char *string2char_ptr(PyObject *pv, ssize_t *len);
+void string2zval(PyObject *pv, zval *zv);
 void tuple2argv(zval *argv, PyObject *args, ssize_t size, int begin = 1);
 void release_argv(uint32_t argc, zval *argv);
+bool contains(PyObject *obj, PyObject *key);
 }  // namespace python
+struct Options {
+    bool numeric_as_object;
+    bool argument_as_object;
+    bool display_exception;
+};
 }  // namespace phpy
+
+extern phpy::Options phpy_options;

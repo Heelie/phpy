@@ -21,19 +21,31 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <string>
+#include <vector>
+
+#include <php_network.h>
+#include <php_streams.h>
+#include <zend_exceptions.h>
 
 #include "stubs/phpy_core_arginfo.h"
+
+typedef void (*PyObjectDtor)(PyObject *);
 
 static zend_class_entry *PyCore_ce;
 static PyObject *module_builtins = nullptr;
 static PyObject *module_phpy = nullptr;
+static PyObject *module_operator = nullptr;
 static std::unordered_map<const char *, PyObject *> builtin_functions;
-static std::unordered_map<PyObject *, void (*)(PyObject *)> zend_objects;
+static std::unordered_map<const char *, PyObject *> operator_functions;
+static std::unordered_map<PyObject *, PyObjectDtor> zend_objects;
+static PyObject *py_contains_operator;
 static long eval_code_id = 0;
 
 using phpy::CallObject;
 using phpy::php::arg_1;
 using phpy::php::arg_2;
+
+phpy::Options phpy_options;
 
 ZEND_METHOD(PyCore, import) {
     size_t l_module;
@@ -64,7 +76,7 @@ ZEND_METHOD(PyCore, eval) {
     std::string module_name = "eval_code_" + std::to_string(eval_code_id++);
     PyObject *module = PyModule_New(module_name.c_str());
     if (module == NULL) {
-        PyErr_Print();
+        phpy::php::throw_error_if_occurred();
         RETURN_FALSE;
     }
 
@@ -76,15 +88,15 @@ ZEND_METHOD(PyCore, eval) {
         auto status = PyDict_Merge(globals, pglobal_params, 0);
         Py_DECREF(pglobal_params);
         if (status != 0) {
-            PyErr_Print();
             Py_DECREF(module);
+            phpy::php::throw_error_if_occurred();
             RETURN_FALSE;
         }
     }
 
     PyObject *result = PyRun_StringFlags(input_code, Py_file_input, globals, NULL, NULL);
     if (result == NULL) {
-        PyErr_Print();
+        phpy::php::throw_error_if_occurred();
         RETVAL_FALSE;
     } else {
         phpy::php::new_module(return_value, module);
@@ -161,6 +173,26 @@ ZEND_METHOD(PyCore, scalar) {
     Py_DECREF(pyobj);
 }
 
+ZEND_METHOD(PyCore, setOptions) {
+    zval *options;
+
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+    Z_PARAM_ARRAY(options)
+    ZEND_PARSE_PARAMETERS_END_EX(return );
+
+    zval *opt;
+
+    if ((opt = phpy::php::array_get(options, ZEND_STRL("numeric_as_object")))) {
+        phpy_options.numeric_as_object = zend_is_true(opt);
+    }
+    if ((opt = phpy::php::array_get(options, ZEND_STRL("argument_as_object")))) {
+        phpy_options.argument_as_object = zend_is_true(opt);
+    }
+    if ((opt = phpy::php::array_get(options, ZEND_STRL("display_exception")))) {
+        phpy_options.display_exception = zend_is_true(opt);
+    }
+}
+
 int php_class_core_init(INIT_FUNC_ARGS) {
     zend_class_entry ce;
     INIT_CLASS_ENTRY(ce, "PyCore", class_PyCore_methods);
@@ -198,24 +230,56 @@ PyMODINIT_FUNC php_init_python_module(void) {
 }
 
 PHP_MINIT_FUNCTION(phpy) {
+    if (phpy_init(PHPY_PHP_EXTENSION) < 0) {
+        zend_error(E_ERROR, "Error: phpy has been initialized");
+        return FAILURE;
+    }
     if (PyImport_AppendInittab("phpy", php_init_python_module) == -1) {
         zend_error(E_ERROR, "Error: failed to call PyImport_AppendInittab()");
         return FAILURE;
     }
     srand(time(NULL));
+
+#if PY_VERSION_HEX >= 0x03080000
+    // doc: https://docs.python.org/3/c-api/init_config.html
+    PyConfig py_config;
+    PyConfig_InitPythonConfig(&py_config);
+    py_config.install_signal_handlers = 0;  // ignore signal
+    py_config.parse_argv = 0;
+    Py_InitializeFromConfig(&py_config);
+    PyConfig_Clear(&py_config);
+#else
     Py_InitializeEx(0);
+#endif
+
     module_phpy = PyImport_ImportModule("phpy");
     if (!module_phpy) {
         PyErr_Print();
         zend_error(E_ERROR, "Error: could not import module 'phpy'");
         return FAILURE;
     }
+
     module_builtins = PyImport_ImportModule("builtins");
     if (!module_builtins) {
         PyErr_Print();
         zend_error(E_ERROR, "Error: could not import module 'builtins'");
         return FAILURE;
     }
+
+    module_operator = PyImport_ImportModule("operator");
+    if (!module_operator) {
+        PyErr_Print();
+        zend_error(E_ERROR, "Error: could not import module 'operator'");
+        return FAILURE;
+    }
+
+    py_contains_operator = PyObject_GetAttrString(module_operator, "contains");
+    if (!py_contains_operator) {
+        PyErr_Print();
+        zend_error(E_ERROR, "Error: could not get 'operator.contains'");
+        return FAILURE;
+    }
+
     php_class_init_all(INIT_FUNC_ARGS_PASSTHRU);
     return SUCCESS;
 }
@@ -231,29 +295,61 @@ PHP_MSHUTDOWN_FUNCTION(phpy) {
         Py_DECREF(kv.second);
     }
     builtin_functions.clear();
+
+    for (auto kv : operator_functions) {
+        Py_DECREF(kv.second);
+    }
+    operator_functions.clear();
+    Py_DECREF(py_contains_operator);
+
     Py_Finalize();
     return SUCCESS;
 }
 
 namespace phpy {
+namespace python {
+bool contains(PyObject *obj, PyObject *key) {
+    auto rs = PyObject_CallFunction(py_contains_operator, "OO", obj, key);
+    return Py_IsTrue(rs);
+}
+}  // namespace python
 namespace php {
 void add_object(PyObject *pv, void (*dtor)(PyObject *)) {
     zend_objects.emplace(pv, dtor);
 }
-void del_object(PyObject *pv) {
-    zend_objects.erase(pv);
+
+bool del_object(PyObject *pv) {
+    return zend_objects.erase(pv) > 0;
 }
+
 void call_builtin_fn(const char *name, size_t l_name, zval *arguments, zval *return_value) {
     auto fn_iter = builtin_functions.find(name);
     PyObject *fn;
     if (fn_iter == builtin_functions.end()) {
         fn = PyObject_GetAttrString(module_builtins, name);
         if (!fn || !PyCallable_Check(fn)) {
-            PyErr_Print();
-            zend_throw_error(NULL, "PyCore: has no builtin function '%s'", name);
+            phpy::php::throw_error_if_occurred();
             return;
         }
         builtin_functions[name] = fn;
+    } else {
+        fn = fn_iter->second;
+    }
+
+    CallObject caller(fn, return_value, arguments);
+    caller.call();
+}
+
+void call_operator_fn(const char *name, size_t l_name, zval *arguments, zval *return_value) {
+    auto fn_iter = operator_functions.find(name);
+    PyObject *fn;
+    if (fn_iter == operator_functions.end()) {
+        fn = PyObject_GetAttrString(module_operator, name);
+        if (!fn || !PyCallable_Check(fn)) {
+            phpy::php::throw_error_if_occurred();
+            return;
+        }
+        operator_functions[name] = fn;
     } else {
         fn = fn_iter->second;
     }
@@ -265,12 +361,23 @@ void call_builtin_fn(const char *name, size_t l_name, zval *arguments, zval *ret
 }  // namespace phpy
 
 PHP_RSHUTDOWN_FUNCTION(phpy) {
+    std::vector<std::pair<PyObject *, PyObjectDtor>> objects;
+    objects.reserve(zend_objects.size());
     for (auto kv : zend_objects) {
+        objects.push_back(std::make_pair(kv.first, kv.second));
+    }
+    for (auto kv : objects) {
         kv.second(kv.first);
     }
     zend_objects.clear();
     return SUCCESS;
 }
+
+BEGIN_EXTERN_C()
+const char *phpy_get_python_version(void) {
+    return Py_GetVersion();
+}
+END_EXTERN_C()
 
 ZEND_METHOD(PyCore, __callStatic) {
     char *name;
@@ -308,4 +415,81 @@ ZEND_METHOD(PyCore, bytes) {
     }
     phpy::php::new_object(return_value, pv);
     Py_DECREF(pv);
+}
+
+ZEND_METHOD(PyCore, fileno) {
+    zval *zfp;
+
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+    Z_PARAM_RESOURCE(zfp)
+    ZEND_PARSE_PARAMETERS_END_EX(RETURN_FALSE);
+
+    if (Z_TYPE_P(zfp) != IS_RESOURCE) {
+        RETURN_FALSE;
+    }
+
+    php_socket_t fd = -1;
+    php_stream *stream;
+    FILE *fp = NULL;
+
+    php_stream_from_zval_no_verify(stream, zfp);
+    if (stream == NULL) {
+        zend_throw_exception(zend_ce_exception, "Only stream type resource is supported", 0);
+        RETURN_FALSE;
+    }
+
+#ifndef PHP_WIN32
+    if (php_stream_is(stream, PHP_STREAM_IS_MEMORY) || php_stream_is(stream, PHP_STREAM_IS_TEMP)) {
+        zend_throw_exception(zend_ce_exception, "Memory and temporary file stream is not supported", 0);
+        RETURN_FALSE;
+    } else
+#endif
+        if (php_stream_can_cast(stream, PHP_STREAM_AS_FD_FOR_SELECT | PHP_STREAM_CAST_INTERNAL) == SUCCESS) {
+        if (php_stream_cast(stream, PHP_STREAM_AS_FD_FOR_SELECT | PHP_STREAM_CAST_INTERNAL, (void **) &fd, 1) !=
+                SUCCESS ||
+            fd < 0) {
+            RETURN_FALSE;
+        }
+    } else if (php_stream_can_cast(stream, PHP_STREAM_AS_FD | PHP_STREAM_CAST_INTERNAL) == SUCCESS) {
+        if (php_stream_cast(stream, PHP_STREAM_AS_FD | PHP_STREAM_CAST_INTERNAL, (void **) &fd, 1) != SUCCESS ||
+            fd < 0) {
+            RETURN_FALSE;
+        }
+    } else if (php_stream_can_cast(stream, PHP_STREAM_AS_STDIO | PHP_STREAM_CAST_INTERNAL) == SUCCESS) {
+        if (php_stream_cast(stream, PHP_STREAM_AS_STDIO, (void **) &fp, 1) != SUCCESS) {
+            RETURN_FALSE;
+        }
+        fd = fileno(fp);
+    } else { /* STDIN, STDOUT, STDERR etc. */
+        fd = Z_LVAL_P(zfp);
+    }
+
+    if (!ZEND_VALID_SOCKET(fd)) {
+        zend_throw_exception(zend_ce_exception, "Invalid file descriptor", 0);
+        RETURN_FALSE;
+    } else {
+        RETURN_LONG(fd);
+    }
+}
+
+ZEND_METHOD(PyCore, raise) {
+    zval *ztype, *zvalue = nullptr;
+
+    ZEND_PARSE_PARAMETERS_START(1, 2)
+    Z_PARAM_OBJECT_OF_CLASS(ztype, phpy_object_get_ce())
+    Z_PARAM_OPTIONAL
+    Z_PARAM_ZVAL(zvalue)
+    ZEND_PARSE_PARAMETERS_END_EX(return );
+
+    if (zvalue) {
+        if (Z_TYPE_P(zvalue) == IS_OBJECT && phpy::php::is_pyobject(zvalue)) {
+            PyErr_SetObject(phpy_object_get_handle(ztype), phpy_object_get_handle(zvalue));
+        } else {
+            zend_string *message = zval_get_string(zvalue);
+            PyErr_SetString(phpy_object_get_handle(ztype), ZSTR_VAL(message));
+            zend_string_release(message);
+        }
+    } else {
+        PyErr_SetNone(phpy_object_get_handle(ztype));
+    }
 }

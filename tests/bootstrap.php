@@ -11,14 +11,16 @@ date_default_timezone_set('Asia/Shanghai');
 !defined('BASE_PATH') && define('BASE_PATH', dirname(__DIR__, 1));
 
 require BASE_PATH . '/vendor/autoload.php';
+require BASE_PATH . '/tests/lib/functions.php';
 
 PyCore::import('sys')->path->append(__DIR__ . '/lib');
+PyClass::setProxyPath(BASE_PATH, true);
 
 class PyLoader
 {
-    static array $modules;
+    public static array $modules;
 
-    static function import(string $name)
+    public static function import(string $name)
     {
         if (!isset(self::$modules[$name])) {
             self::$modules[$name] = PyCore::import($name);
@@ -27,28 +29,26 @@ class PyLoader
     }
 }
 
-
 class FnCallableClass
 {
     private $phpunit;
     private $uuid;
 
-    function __construct($phpunit, $uuid)
+    public function __construct($phpunit, $uuid)
     {
         $this->phpunit = $phpunit;
         $this->uuid = $uuid;
     }
 
-    function __invoke($namespace)
+    public function __invoke($namespace)
     {
         $this->phpunit->assertEquals($namespace, 'app.user');
         return $this->uuid;
     }
 
-    function test($namespace)
+    public function test($namespace)
     {
         $this->phpunit->assertEquals($namespace, 'app.user');
         return $this->uuid;
     }
 }
-

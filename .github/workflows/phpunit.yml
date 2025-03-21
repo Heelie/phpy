@@ -36,12 +36,16 @@ jobs:
       - name: Build
         run: |
           phpize
-          ./configure --with-python-config=python3-config
+          ./configure
           make -j $(nproc)
           sudo make install
           sudo sh -c "echo 'extension=phpy.so' > /etc/php/${PHP_VERSION}/cli/conf.d/90-phpy.ini"
           php --ri phpy
       - name: Run phpunit tests
+        env:
+          LC_ALL: POSIX # Do not remove this line, PR: https://github.com/swoole/phpy/pull/45
         run: |
+          sudo apt install -y redis-server
+          sudo service redis-server start
           composer install
           composer test

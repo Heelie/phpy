@@ -45,7 +45,8 @@ $class = $m->$className;
 - `PyCore::dict()` 构造一个字典对象
 - `PyCore::set()` 构造一个集合对象
 - `PyCore::range()` 构造一个范围序列
-- `PyCore::scalar()` 将 `PyObject` 对象转为 `PHP` 的标量类型，例如 `PyStr` 将转为 `PHP 字符串`，`Dict/Tuple/Set/List` 将转为 `Array`
+- `PyCore::scalar($pyobj)` 将 `PyObject` 对象转为 `PHP` 的标量类型，例如 `PyStr` 将转为 `PHP 字符串`，`Dict/Tuple/Set/List` 将转为 `Array`
+- `PyCore::fileno($fp)` 获取 `PHP Stream` 资源的文件描述符，请注意仅支持 `tcp/udp/unix` 类型的资源
 
 > `PyCore` 实现了 `__callStatic()` 魔术方法，对于 `PyCore` 静态方法调用会自动调用 `Python` 的 `builtins` 模块对应的方法 ，
 > 可参考 [Built-in Functions](https://docs.python.org/3/library/functions.html) 了解更多内置方法的使用
@@ -105,4 +106,25 @@ export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libffi.so.7
 $b = PyCore::import('a')->b;
 # 替换为以下代码
 $b = PyCore::import('a.b');
+```
+
+## 内置类型
+某些情况下，我们需要将类型作为参数传递给 `Python` 函数，可使用`PyCore::type()`实现。
+
+```php
+$type_int = PyCore::type(0);
+$type_float = PyCore::type(3.14);
+$type_str = PyCore::type('hello');
+$type_list = PyCore::type([1, 2, 3]);
+$type_dict = PyCore::type(['a' => 1, 'b' => 2]);
+$type_tuple = PyCore::type([1, 2, 3]);
+$type_null = PyCore::type(null);
+$type_bool = PyCore::type(true);
+```
+
+`PyCore::type()` 返回一个 `PyType` 对象，可用于传递给 `Python` 函数。`PyType` 对象作为
+函数调用，可再次构造一个新的`Python`对象。
+
+```php
+$value = $type_int(100);
 ```

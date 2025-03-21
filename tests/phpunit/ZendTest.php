@@ -4,7 +4,7 @@ use PHPUnit\Framework\TestCase;
 
 class ZendTest extends TestCase
 {
-    function testZendObject()
+    public function testZendObject()
     {
         $dict = PyCore::dict();
         $zojb = new stdClass();
@@ -14,5 +14,21 @@ class ZendTest extends TestCase
 
         $type = strval($m->get_type($dict, 'zend_object'));
         $this->assertStringStartsWith('<zend_object object at', $type);
+    }
+
+    public function testCallMethodInPython()
+    {
+        $m = PyCore::import('app.user');
+
+        $redis = new redis();
+        $redis->connect('127.0.0.1');
+        $rs = $m->test_redis($redis);
+        $this->assertEquals($rs, 'hello phpy');
+    }
+
+    public function testCallFuncInPython()
+    {
+        $m = PyCore::import('app.phpy');
+        $this->assertContains('phpy', $m->test_import());
     }
 }

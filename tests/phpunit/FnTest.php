@@ -4,7 +4,7 @@ use PHPUnit\Framework\TestCase;
 
 class FnTest extends TestCase
 {
-    function testFn()
+    public function testFn()
     {
         $m = PyCore::import('app.user');
         $uuid = uniqid();
@@ -15,7 +15,7 @@ class FnTest extends TestCase
         $this->assertEquals($rs, $uuid);
     }
 
-    function testClosure()
+    public function testClosure()
     {
         $m = PyCore::import('app.user');
         $uuid = uniqid();
@@ -26,7 +26,7 @@ class FnTest extends TestCase
         $this->assertEquals($rs, $uuid);
     }
 
-    function testObjectInvoke()
+    public function testObjectInvoke()
     {
         $m = PyCore::import('app.user');
         $uuid = uniqid();
@@ -35,7 +35,7 @@ class FnTest extends TestCase
         $this->assertEquals($rs, $uuid);
     }
 
-    function testObjectNotInvoke()
+    public function testObjectNotInvoke()
     {
         $m = PyCore::import('app.user');
         $obj = new stdClass();
@@ -53,19 +53,31 @@ class FnTest extends TestCase
         $this->assertFalse($success);
     }
 
-    function testObjectErrorArgs()
+    public function testObjectErrorArgs()
     {
         $m = PyCore::import('app.user');
         $uuid = uniqid();
         $success = true;
         $obj = new FnCallableClass($this, $uuid);
         try {
-            $rs = $m->test_callback(fn() => [$obj, 'test']());
+            $rs = $m->test_callback(fn () => [$obj, 'test']());
         } catch (PyError $error) {
             $this->assertStringContainsString('Function call failed', $error->getMessage());
             $this->assertStringContainsString('Too few arguments', $error->getPrevious()->getMessage());
             $success = false;
         }
         $this->assertFalse($success);
+    }
+
+    public function testCtor()
+    {
+        $m = PyCore::import('app.user');
+        $uuid = uniqid();
+        $fn = new PyFn(function ($namespace) use ($uuid) {
+            $this->assertEquals($namespace, 'app.user');
+            return $uuid;
+        });
+        $rs = $m->test_callback($fn);
+        $this->assertEquals($rs, $uuid);
     }
 }

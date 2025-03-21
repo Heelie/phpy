@@ -5,12 +5,12 @@
 A library for inter-calling `Python` and `PHP`. 
 You can use Python functions and libraries in PHP, or use PHP packages in Python.
 
-> See documents: [docs/en/README.md](docs/en/README.md)
+![phpy ecosystems](docs/images/ecosystems.svg)
 
-
-
-> Supports Linux/Windows/macOS
-> Not support Python multithreading or async-io features
+- See documents: [docs/en/README.md](docs/en/README.md)
+- Supports `Linux`/`Windows`/`macOS`
+- **Not support Python `threading` or `async-io` features**
+- Require `PHP 8.1` or later version
 
 ## py2php
 [py2php](https://swoole.com/py2php/) is online utility that will auto-translate python code into PHP code.
@@ -23,8 +23,21 @@ Compile and install phpy.so as an extension, and append `extension=phpy.so` to `
 
 ```php
 $os = PyCore::import("os");
-$un = $os->uname();
-echo strval($un);
+echo $os->uname();
+```
+
+### Transformers
+
+```php
+$transformers = PyCore::import('transformers');
+$AutoTokenizer = $transformers->AutoTokenizer;
+$AutoModelForSequenceClassification = $transformers->AutoModelForSequenceClassification;
+
+$os = PyCore::import('os');
+$os->environ['https_proxy'] = getenv('https_proxy');
+
+$tokenizer = $AutoTokenizer->from_pretrained("lxyuan/distilbert-base-multilingual-cased-sentiments-student");
+$model = $AutoModelForSequenceClassification->from_pretrained("lxyuan/distilbert-base-multilingual-cased-sentiments-student");
 ```
 
 ## Calling PHP from Python
